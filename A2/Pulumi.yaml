@@ -1,0 +1,12 @@
+name: A2-IaC
+description: 'Infrastructure-as-Code: Getting to know Pulumi'
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: azure-python
+     

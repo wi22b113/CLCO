@@ -1,0 +1,11 @@
+name: A3-Compute
+description: 'Compute: Deploy a Python Web App'
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: azure-python
