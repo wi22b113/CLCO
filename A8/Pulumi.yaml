@@ -1,0 +1,11 @@
+name: A8-LoadBalancing
+description: 'Load Balancing: Basic high availability setup'
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: azure-python

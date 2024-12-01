@@ -8,7 +8,7 @@ from pulumi import FileArchive, Output  # Importiert FileArchive und Output von 
 location = 'eastus2'  # Setzt die Region für die Ressourcenbereitstellung auf 'eastus2'
 
 # Resource Group erstellen
-resource_group = resources.ResourceGroup('resource_group', location=location)  # Erstellt eine Ressourcengruppe in der angegebenen Region
+resource_group = resources.ResourceGroup('a3-resource_group', location=location)  # Erstellt eine Ressourcengruppe in der angegebenen Region
 
 # Storage Account erstellen
 storage_account = storage.StorageAccount(
@@ -120,6 +120,8 @@ pulumi.export('url', app.default_host_name.apply(lambda host_name: f"https://{ho
 pulumi.export("resource_group_name", resource_group.name)  # Exportiert den Namen der Ressourcengruppe
 pulumi.export("storage_account_name", storage_account.name)  # Exportiert den Namen des Speicherkontos
 pulumi.export("blob_container_name", container.name)  # Exportiert den Namen des Blob-Containers
+pulumi.export("package_url", package_url)  # Exportiert die URL des Anwendungspakets
+pulumi.export("blob_url", blob_url)  # Exportiert die URL des Blobs
 pulumi.export("web_app_url", app.default_host_name)  # Exportiert die URL der Web-App
 pulumi.export("web_app_name", app.name)  # Exportiert den Namen der Web-App
 pulumi.export("app_blob_url", blob_url)  # Exportiert die URL des Blobs
