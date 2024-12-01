@@ -1,2 +1,3 @@
 config:
   azure-native:location: uksouth
+  A8-LoadBalancing:subscription_id: 1b744ae6-c1ae-4bce-8d17-b6bdf7ffee00

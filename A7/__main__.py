@@ -77,7 +77,7 @@ language_account = azure_native.cognitiveservices.Account(
     properties=azure_native.cognitiveservices.AccountPropertiesArgs(
         public_network_access="Disabled",
         custom_sub_domain_name="A7-mt-LanguageService",
-        #restore=True  # Add this line to restore the soft-deleted resource
+        restore=True  # Add this line to restore the soft-deleted resource
     ),
     identity=azure_native.cognitiveservices.IdentityArgs(
         type="SystemAssigned"
