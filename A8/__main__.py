@@ -1,59 +1,69 @@
 import pulumi
 from pulumi import Config, Output
-from pulumi_azure_native import resources, network, cognitiveservices, web
+from pulumi_azure_native import resources, network, compute
 import pulumi_azure_native as azure_native
 from pulumi_random import random_string
 
+# Konfigurationseinstellungen laden
 config = pulumi.Config()
 azure_location = config.get("azure-native:location") or "uksouth"
 
-# Create an Azure Resource Group
+# **Step 1: Erstellen einer Resource Group**
+# Die Resource Group bündelt alle Ressourcen für eine einfache Verwaltung.
 resource_group = azure_native.resources.ResourceGroup("myResourceGroup",
-    resource_group_name="A8ResourceGroup",)
+    resource_group_name="A8ResourceGroup",
+)
 
-# Create a Virtual Network
+# **Step 1: Erstellen eines virtuellen Netzwerks**
+# Definiert das Netzwerk für die virtuellen Maschinen und die Load Balancer-Komponenten.
 virtual_network = azure_native.network.VirtualNetwork("vnet",
     resource_group_name=resource_group.name,
     virtual_network_name=resource_group.name.apply(lambda name: f"{name}-vnet"),
     address_space=azure_native.network.AddressSpaceArgs(
-        address_prefixes=["10.0.0.0/16"]
+        address_prefixes=["10.0.0.0/16"]  # IP-Bereich des Netzwerks
     ))
 
-# Create a Subnet
+# **Step 1: Erstellen eines Subnetzes**
+# Subnetz für die virtuellen Maschinen innerhalb des Netzwerks.
 subnet = azure_native.network.Subnet("subnet",
     resource_group_name=resource_group.name,
     virtual_network_name=virtual_network.name,
     subnet_name=resource_group.name.apply(lambda name: f"{name}-subnet"),
-    address_prefix="10.0.1.0/24")
+    address_prefix="10.0.1.0/24"  # IP-Bereich des Subnetzes
+)
 
-# Create a Network Security Group
+# **Step 1: Erstellen einer Network Security Group (NSG)**
+# Legt Sicherheitsregeln für das Netzwerk fest.
 network_security_group = azure_native.network.NetworkSecurityGroup("nsg",
     resource_group_name=resource_group.name,
     network_security_group_name=resource_group.name.apply(lambda name: f"{name}-nsg"))
 
-# Allow inbound traffic on port 80
+# **Erstellen einer Regel, die HTTP-Verkehr (Port 80) erlaubt**
 security_rule = azure_native.network.SecurityRule("allow80InboundRule",
     resource_group_name=resource_group.name,
     network_security_group_name=network_security_group.name,
     security_rule_name="Allow-80-Inbound",
-    priority=110,
-    direction="Inbound",
+    priority=110,  # Priorität der Regel
+    direction="Inbound",  # Eingehender Verkehr
     access="Allow",
     protocol="Tcp",
     source_port_range="*",
-    destination_port_range="80",
+    destination_port_range="80",  # Port für HTTP
     source_address_prefix="*",
     destination_address_prefix="*")
 
-# Create a Public IP Address
+# **Step 2: Erstellen einer öffentlichen IP-Adresse**
+# Öffentliche IP-Adresse wird dem Load Balancer zugewiesen.
 public_ip = azure_native.network.PublicIPAddress("publicIp",
     resource_group_name=resource_group.name,
     public_ip_address_name="A8PublicIP",
-    sku=azure_native.network.PublicIPAddressSkuArgs(name="Standard"),
-    public_ip_allocation_method="Static",
-    zones=["1", "2", "3"])
+    sku=azure_native.network.PublicIPAddressSkuArgs(name="Standard"),  # SKU für hohe Verfügbarkeit
+    public_ip_allocation_method="Static",  # Statische IP-Adresse
+    zones=["1", "2", "3"]  # Verfügbarkeit in mehreren Zonen
+)
 
-# Create a Load Balancer
+# **Step 3: Erstellen eines Load Balancers**
+# Der Load Balancer verteilt den Verkehr zwischen den virtuellen Maschinen.
 load_balancer = azure_native.network.LoadBalancer("loadBalancer",
     resource_group_name=resource_group.name,
     load_balancer_name="A8LoadBalancer",
@@ -61,14 +71,14 @@ load_balancer = azure_native.network.LoadBalancer("loadBalancer",
     frontend_ip_configurations=[azure_native.network.FrontendIPConfigurationArgs(
         name="myFrontEnd",
         public_ip_address=azure_native.network.PublicIPAddressArgs(
-            id=public_ip.id
+            id=public_ip.id  # Verknüpfung mit der öffentlichen IP
         )
     )],
-    backend_address_pools=[azure_native.network.BackendAddressPoolArgs(name="myBackEndPool")],
+    backend_address_pools=[azure_native.network.BackendAddressPoolArgs(name="myBackEndPool")],  # Backend-Pool
     probes=[azure_native.network.ProbeArgs(
-        name="httpProbe",
+        name="httpProbe",  # Health Probe für die Überwachung der VMs
         protocol="Http",
-        port=80,
+        port=80,  # Überwachung von HTTP auf Port 80
         request_path="/",
         interval_in_seconds=15,
         number_of_probes=2
@@ -85,21 +95,22 @@ load_balancer = azure_native.network.LoadBalancer("loadBalancer",
             id=f"/subscriptions/{pulumi.Config().require('subscription_id')}/resourceGroups/A8ResourceGroup/providers/Microsoft.Network/loadBalancers/A8LoadBalancer/probes/httpProbe"
         ),
         protocol="Tcp",
-        frontend_port=80,
-        backend_port=80,
+        frontend_port=80,  # Eingangsport
+        backend_port=80,  # Weiterleitung an Backend-Port
         enable_floating_ip=False,
         idle_timeout_in_minutes=4,
         load_distribution="Default"
-    )])
+    )]
+)
 
-
-# Create Network Interfaces
+# **Step 4: Erstellen von Netzwerk-Schnittstellen für die VMs**
+# Netzwerk-Interface für VM1
 nic1 = azure_native.network.NetworkInterface("nic1",
     resource_group_name=resource_group.name,
     network_interface_name=resource_group.name.apply(lambda name: f"{name}-nic1"),
     ip_configurations=[azure_native.network.NetworkInterfaceIPConfigurationArgs(
         name="ipconfig1",
-        subnet=azure_native.network.SubResourceArgs(id=subnet.id),
+        subnet=azure_native.network.SubResourceArgs(id=subnet.id),  # Verbindung mit dem Subnetz
         private_ip_allocation_method="Dynamic",
         load_balancer_backend_address_pools=[azure_native.network.SubResourceArgs(
             id=load_balancer.backend_address_pools[0].id
@@ -107,8 +118,7 @@ nic1 = azure_native.network.NetworkInterface("nic1",
     )],
     network_security_group=azure_native.network.SubResourceArgs(id=network_security_group.id))
 
-
-# Create Network Interfaces
+# Netzwerk-Interface für VM2
 nic2 = azure_native.network.NetworkInterface("nic2",
     resource_group_name=resource_group.name,
     network_interface_name=resource_group.name.apply(lambda name: f"{name}-nic2"),
@@ -122,11 +132,11 @@ nic2 = azure_native.network.NetworkInterface("nic2",
     )],
     network_security_group=azure_native.network.SubResourceArgs(id=network_security_group.id))
 
-# Create vm1
-vm_name1 = resource_group.name.apply(lambda name: f"{name}-vm1")
+# **Step 1: Erstellen der virtuellen Maschinen**
+# Definition von VM1
 vm1 = azure_native.compute.VirtualMachine("vm1",
     resource_group_name=resource_group.name,
-    vm_name=vm_name1,
+    vm_name=resource_group.name.apply(lambda name: f"{name}-vm1"),
     network_profile=azure_native.compute.NetworkProfileArgs(
         network_interfaces=[azure_native.compute.NetworkInterfaceReferenceArgs(
             id=nic1.id
@@ -146,8 +156,10 @@ vm1 = azure_native.compute.VirtualMachine("vm1",
         computer_name="vm1",
         admin_username="azureuser",
         admin_password="GanzGeheim123!"
-    ))
+    )
+)
 
+# Installation von Nginx auf VM1
 vm1_extension = azure_native.compute.VirtualMachineExtension("vm1Extension",
     resource_group_name=resource_group.name,
     vm_name=vm1.name,
@@ -157,17 +169,13 @@ vm1_extension = azure_native.compute.VirtualMachineExtension("vm1Extension",
     type_handler_version="2.1",
     auto_upgrade_minor_version=True,
     settings={
-        "commandToExecute": "sudo apt-get update && sudo apt-get install -y nginx && "
-                            "echo '<head><title>Hello World 1</title></head><body><h1>Web Portal</h1>"
-                            "<p>Hello World 1</p></body>' | sudo tee /var/www/html/index.nginx-debian.html && "
-                            "sudo systemctl restart nginx"
+        "commandToExecute": "sudo apt-get update && sudo apt-get install -y nginx"
     })
 
-# Create vm2
-vm_name2 = resource_group.name.apply(lambda name: f"{name}-vm2")
+# Definition von VM2 (gleich wie VM1)
 vm2 = azure_native.compute.VirtualMachine("vm2",
     resource_group_name=resource_group.name,
-    vm_name=vm_name2,
+    vm_name=resource_group.name.apply(lambda name: f"{name}-vm2"),
     network_profile=azure_native.compute.NetworkProfileArgs(
         network_interfaces=[azure_native.compute.NetworkInterfaceReferenceArgs(
             id=nic2.id
@@ -187,8 +195,10 @@ vm2 = azure_native.compute.VirtualMachine("vm2",
         computer_name="vm2",
         admin_username="azureuser",
         admin_password="GanzGeheim123!"
-    ))
+    )
+)
 
+# Installation von Nginx auf VM2
 vm2_extension = azure_native.compute.VirtualMachineExtension("vm2Extension",
     resource_group_name=resource_group.name,
     vm_name=vm2.name,
