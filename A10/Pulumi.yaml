@@ -1,0 +1,11 @@
+name: A10-Identity
+description: 'Identity: Grant Access and RBAC'
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: azure-python
