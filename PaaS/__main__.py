@@ -12,6 +12,10 @@ config = Config()
 azure_location = config.get("azure-native:location") or "westeurope"
 defined_repo_url = config.get("my:repoUrl") or "https://github.com/wi22b113/clco-demo/"
 defined_branch = config.get("my:branch") or "main"
+subscription_id = "1b744ae6-c1ae-4bce-8d17-b6bdf7ffee00"
+email = "wi22b113@technikum-wien.at"
+start_date = datetime(2024, 12, 1).strftime('%Y-%m-%dT%H:%M:%SZ')  # Startdatum: 1. November 2024
+end_date = datetime(2025, 2, 28).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 # Erstellung einer Azure Resource Group
 # Diese Ressourcengruppe enthält alle Ressourcen, die im Skript erstellt werden
@@ -156,6 +160,36 @@ app_service_plan = web.AppServicePlan('appServicePlan',
     kind='linux',  # Für Linux-basierte Web-Apps
     reserved=True
 )
+
+budget = resource_group.name.apply(lambda rg_name: consumption.Budget(
+    resource_name="PaaS-Budget",  # Name des Budgets
+    scope=f"/subscriptions/{subscription_id}/resourceGroups/{rg_name}",  # Begrenzung auf die Resource Group
+    amount=50,  # Budgetbetrag
+    time_grain="Monthly",  # Budget-Rücksetzintervall
+    time_period={
+        "startDate": start_date,  # Startdatum des Budgets
+        "endDate": end_date,  # Enddatum des Budgets
+    },
+    notifications={
+        "Actual50Percent": {  # Benachrichtigung, wenn 50 % des Budgets erreicht werden
+            "enabled": True,
+            "operator": "GreaterThan",  # Bedingung: Budget überschritten
+            "threshold": 75,  # 50 % des Budgets
+            "contact_emails": [email],  # E-Mail-Adresse für Benachrichtigungen
+            "contact_roles": [],  # Keine spezifischen Rollen
+            "notification_language": "en-US",  # Sprache der Benachrichtigung
+        },
+        "Actual90Percent": {  # Benachrichtigung, wenn 90 % des Budgets erreicht werden
+            "enabled": True,
+            "operator": "GreaterThan",
+            "threshold": 90,  # 90 % des Budgets
+            "contact_emails": [email],
+            "contact_roles": [],
+            "notification_language": "en-US",
+        },
+    },
+    category="Cost",  # Budget für Kostenüberwachung
+))
 
 # Web App
 web_app = web.WebApp('webApp',
