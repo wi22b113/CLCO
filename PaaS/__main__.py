@@ -2,7 +2,7 @@ import pulumi
 from pulumi import Config, Output
 from pulumi_azure_native import resources, network, cognitiveservices, web
 import pulumi_azure_native as azure_native
-from pulumi_random import RandomString
+#from pulumi_random import RandomString
 
 # Laden der Konfigurationen, um benutzerdefinierte Werte zu verwenden
 # azure_location: Standort, an dem alle Ressourcen bereitgestellt werden
@@ -157,77 +157,50 @@ app_service_plan = web.AppServicePlan('appServicePlan',
     reserved=True
 )
 
-# Common configuration for the Web Apps
-web_app_names = ["PaaS-mtdb-webapp1", "PaaS-mtdb-webapp2", "PaaS-mtdb-webapp3"]
-web_apps = []
-
-for web_app_name in web_app_names:
-    web_app = azure_native.web.WebApp(web_app_name,
-        resource_group_name=resource_group.name,
-        location=azure_location,
-        server_farm_id=app_service_plan.id,
-        https_only=True,
-        kind="app,linux",
-        site_config=azure_native.web.SiteConfigArgs(
-            linux_fx_version="PYTHON|3.8",
-            app_settings=[
-                azure_native.web.NameValuePairArgs(
-                    name="AZ_ENDPOINT",
-                    value=pulumi.Output.concat("https://", language_account.name, ".cognitiveservices.azure.com/")
-                ),
-                azure_native.web.NameValuePairArgs(
-                    name="AZ_KEY",
-                    value=account_keys.key1
-                ),
-                azure_native.web.NameValuePairArgs(
-                    name="WEBSITE_RUN_FROM_PACKAGE",
-                    value="0"
-                ),
-            ],
-            always_on=True,
-            ftps_state="Disabled"
-        )
+# Web App
+web_app = web.WebApp('webApp',
+    resource_group_name=resource_group.name,
+    name="PaaS-dbmt-webapp",
+    location=azure_location,
+    server_farm_id=app_service_plan.id,
+    https_only=True,
+    kind='app,linux',
+    site_config=web.SiteConfigArgs(
+        linux_fx_version='PYTHON|3.9',
+        app_settings=[
+            web.NameValuePairArgs(
+                name='AZ_ENDPOINT',
+                value=pulumi.Output.concat("https://", language_account.name, ".cognitiveservices.azure.com/")
+            ),
+            web.NameValuePairArgs(
+                name='AZ_KEY',
+                value=account_keys.key1
+            ),
+            web.NameValuePairArgs(
+                name='WEBSITE_RUN_FROM_PACKAGE',
+                value='0'
+            ),
+        ],
+        always_on=True,
+        ftps_state='Disabled'
     )
-    web_apps.append(web_app)
-    
-for idx, web_app in enumerate(web_apps):
-    azure_native.web.WebAppSwiftVirtualNetworkConnection(f"vnetIntegration-{idx+1}",
-        name=web_app.name.apply(lambda n: n),  # Auflösen des Output-Objekts
-        resource_group_name=resource_group.name,
-        subnet_resource_id=app_subnet.id
-    )
+)
 
-## Integration der Web-App mit dem Subnetz des virtuellen Netzwerks
-#vnet_integration = web.WebAppSwiftVirtualNetworkConnection('vnetIntegration',
-#    name=web_app.name,
-#    resource_group_name=resource_group.name,
-#    subnet_resource_id=app_subnet.id
-#)
+# VNet Integration
+vnet_integration = web.WebAppSwiftVirtualNetworkConnection('vnetIntegration',
+    name=web_app.name,
+    resource_group_name=resource_group.name,
+    subnet_resource_id=app_subnet.id
+)
 
-for web_app in web_apps:
-    azure_native.web.WebAppSourceControl(f"{web_app._name}-SourceControl",
-        name=web_app.name,
-        resource_group_name=resource_group.name,
-        repo_url=defined_repo_url,
-        branch=defined_branch,
-        is_manual_integration=True,
-        deployment_rollback_enabled=False
-    )
-
-## Verknüpfung der Web-App mit einem Git-Repository und Branch
-#source_control = azure_native.web.WebAppSourceControl("PaaS-SourceControl",
-#    name=web_app.name,
-#    resource_group_name=resource_group.name,
-#    repo_url=defined_repo_url,
-#    branch=defined_branch,
-#    is_manual_integration=True,  # Manuelle Integration verwenden
-#    deployment_rollback_enabled=False
-#)
-
-# Export the URLs of the created Web Apps
-for idx, web_app in enumerate(web_apps):
-    pulumi.export(f"web_app_url_{idx+1}", pulumi.Output.concat("https://", web_app.default_host_name))
-    
+source_control = azure_native.web.WebAppSourceControl("sourceControl",
+    name=web_app.name,
+    resource_group_name=resource_group.name,
+    repo_url=defined_repo_url,  # Replace with your repository URL
+    branch=defined_branch,  # Replace with your branch name
+    is_manual_integration=True,
+    deployment_rollback_enabled=False
+)
 # Exportieren von Informationen für weitere Nutzung
 # Hostname der Web-App und ID des Cognitive Services‚
 pulumi.export("hostname", pulumi.Output.concat("[Web App](http://", web_app.default_host_name, ")"))
