@@ -22,12 +22,12 @@ resource_group = resources.ResourceGroup('PaaS-ResourceGroup',
 
 # Generieren eines zufälligen DNS-Namens für die Web-App
 # Dieser sorgt dafür, dass der Name weltweit eindeutig bleibt
-webapp_name_label1 = RandomString(
-    "PaaS-webapp-",
-    length=8,
-    upper=False,
-    special=False,
-).result.apply(lambda result: f"{web_app}-{result}")
+#webapp_name_label1 = RandomString(
+#    "PaaS-webapp-",
+#    length=8,
+#    upper=False,
+#    special=False,
+#).result.apply(lambda result: f"{web_app}-{result}")
 
 # Erstellen eines virtuellen Netzwerks (VNet) für die App und die Azure AI Services
 # address_prefixes: Definiert den IP-Adressraum für das Netzwerk
@@ -85,7 +85,7 @@ language_account = azure_native.cognitiveservices.Account(
     properties=azure_native.cognitiveservices.AccountPropertiesArgs(
         public_network_access="Disabled",  # Verhindert öffentlichen Netzwerkzugang
         custom_sub_domain_name="PaaS-LanguageService",
-        #restore=True  # Versucht, einen gelöschten Account wiederherzustellen
+        restore=True  # Versucht, einen gelöschten Account wiederherzustellen
     ),
     identity=azure_native.cognitiveservices.IdentityArgs(
         type="SystemAssigned"  # Verwendet systemzugewiesene Identität für Authentifizierung
@@ -150,59 +150,85 @@ app_service_plan = web.AppServicePlan('appServicePlan',
     location=azure_location,
     sku=web.SkuDescriptionArgs(
         name='B1',  # Kostengünstige Basis-Stufe
-        tier='Basic'
+        tier='Basic',
+        capacity=3
     ),
     kind='linux',  # Für Linux-basierte Web-Apps
     reserved=True
 )
 
-# Erstellung und Konfiguration der Web-App
-web_app = web.WebApp('webApp',
-    resource_group_name=resource_group.name,
-    name="PaaS-webapp",
-    location=azure_location,
-    server_farm_id=app_service_plan.id,  # Verknüpft mit dem App Service Plan
-    https_only=True,  # HTTPS erzwingen
-    kind='app,linux',
-    site_config=web.SiteConfigArgs(
-        linux_fx_version='PYTHON|3.8',  # Python-Laufzeit
-        app_settings=[
-            web.NameValuePairArgs(
-                name='AZ_ENDPOINT',
-                value=pulumi.Output.concat("https://", language_account.name, ".cognitiveservices.azure.com/")
-            ),
-            web.NameValuePairArgs(
-                name='AZ_KEY',
-                value=account_keys.key1  # Zugriffsschlüssel für den Dienst
-            ),
-            web.NameValuePairArgs(
-                name='WEBSITE_RUN_FROM_PACKAGE',
-                value='0'  # Standardkonfiguration
-            ),
-        ],
-        always_on=True,  # Immer eingeschaltet lassen
-        ftps_state='Disabled'  # FTP deaktivieren
+# Common configuration for the Web Apps
+web_app_names = ["PaaS-mtdb-webapp1", "PaaS-mtdb-webapp2", "PaaS-mtdb-webapp3"]
+web_apps = []
+
+for web_app_name in web_app_names:
+    web_app = azure_native.web.WebApp(web_app_name,
+        resource_group_name=resource_group.name,
+        location=azure_location,
+        server_farm_id=app_service_plan.id,
+        https_only=True,
+        kind="app,linux",
+        site_config=azure_native.web.SiteConfigArgs(
+            linux_fx_version="PYTHON|3.8",
+            app_settings=[
+                azure_native.web.NameValuePairArgs(
+                    name="AZ_ENDPOINT",
+                    value=pulumi.Output.concat("https://", language_account.name, ".cognitiveservices.azure.com/")
+                ),
+                azure_native.web.NameValuePairArgs(
+                    name="AZ_KEY",
+                    value=account_keys.key1
+                ),
+                azure_native.web.NameValuePairArgs(
+                    name="WEBSITE_RUN_FROM_PACKAGE",
+                    value="0"
+                ),
+            ],
+            always_on=True,
+            ftps_state="Disabled"
+        )
     )
-)
+    web_apps.append(web_app)
+    
+for idx, web_app in enumerate(web_apps):
+    azure_native.web.WebAppSwiftVirtualNetworkConnection(f"vnetIntegration-{idx+1}",
+        name=web_app.name.apply(lambda n: n),  # Auflösen des Output-Objekts
+        resource_group_name=resource_group.name,
+        subnet_resource_id=app_subnet.id
+    )
 
-# Integration der Web-App mit dem Subnetz des virtuellen Netzwerks
-vnet_integration = web.WebAppSwiftVirtualNetworkConnection('vnetIntegration',
-    name=web_app.name,
-    resource_group_name=resource_group.name,
-    subnet_resource_id=app_subnet.id
-)
+## Integration der Web-App mit dem Subnetz des virtuellen Netzwerks
+#vnet_integration = web.WebAppSwiftVirtualNetworkConnection('vnetIntegration',
+#    name=web_app.name,
+#    resource_group_name=resource_group.name,
+#    subnet_resource_id=app_subnet.id
+#)
 
-# Verknüpfung der Web-App mit einem Git-Repository und Branch
-source_control = azure_native.web.WebAppSourceControl("PaaS-SourceControl",
-    name=web_app.name,
-    resource_group_name=resource_group.name,
-    repo_url=defined_repo_url,
-    branch=defined_branch,
-    is_manual_integration=True,  # Manuelle Integration verwenden
-    deployment_rollback_enabled=False
-)
+for web_app in web_apps:
+    azure_native.web.WebAppSourceControl(f"{web_app._name}-SourceControl",
+        name=web_app.name,
+        resource_group_name=resource_group.name,
+        repo_url=defined_repo_url,
+        branch=defined_branch,
+        is_manual_integration=True,
+        deployment_rollback_enabled=False
+    )
 
+## Verknüpfung der Web-App mit einem Git-Repository und Branch
+#source_control = azure_native.web.WebAppSourceControl("PaaS-SourceControl",
+#    name=web_app.name,
+#    resource_group_name=resource_group.name,
+#    repo_url=defined_repo_url,
+#    branch=defined_branch,
+#    is_manual_integration=True,  # Manuelle Integration verwenden
+#    deployment_rollback_enabled=False
+#)
+
+# Export the URLs of the created Web Apps
+for idx, web_app in enumerate(web_apps):
+    pulumi.export(f"web_app_url_{idx+1}", pulumi.Output.concat("https://", web_app.default_host_name))
+    
 # Exportieren von Informationen für weitere Nutzung
-# Hostname der Web-App und ID des Cognitive Services
+# Hostname der Web-App und ID des Cognitive Services‚
 pulumi.export("hostname", pulumi.Output.concat("[Web App](http://", web_app.default_host_name, ")"))
 pulumi.export("account_id", language_account.id)

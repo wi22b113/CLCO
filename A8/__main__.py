@@ -170,6 +170,9 @@ vm1_extension = azure_native.compute.VirtualMachineExtension("vm1Extension",
     auto_upgrade_minor_version=True,
     settings={
         "commandToExecute": "sudo apt-get update && sudo apt-get install -y nginx"
+                            "echo '<head><title>Hello World 2</title></head><body><h1>Web Portal</h1>"
+                            "<p>Hello World 2</p></body>' | sudo tee /var/www/html/index.nginx-debian.html && "
+                            "sudo systemctl restart nginx"
     })
 
 # Definition von VM2 (gleich wie VM1)
